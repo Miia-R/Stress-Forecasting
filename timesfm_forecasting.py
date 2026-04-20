@@ -44,15 +44,11 @@ def predict_data(task, subject, modality, url):
     values_df = pd.DataFrame({"y":df[modality]})
     values_array = values_df.to_numpy()
     values_array = np.ravel(values_array)
-    #print(values_array)
-
-    # Smoothing filter
-    # values_array = savgol_filter(values_array, window_length=100, polyorder=3)
-    # Splitting data to be able to normalize it, and after normalization putting it together
 
 
 
-    TEST = math.floor(len(values_array) * test_data_percent) #Changing to test with 20% instead of 30%
+
+    TEST = math.floor(len(values_array) * test_data_percent)
     print(" the index of the test/train split is ", TEST)
 
     train_array = values_array[:-TEST]
@@ -66,23 +62,19 @@ def predict_data(task, subject, modality, url):
     df = df.drop([modality], axis=1)
     df.insert(len(df.columns), 'data', normalized_df.values)
 
-    #id_str = f"{subject}{task}{modality}"
-    #print(id_str)
-    #id = np.full((len(df), 1), id_str)
-    #df.insert(len(df.columns), 'item_id', id)
 
         
     torch.set_float32_matmul_precision("high")
 
-    # --- 2. Prepare Data ---
+    # Splitting data
 
     time_series_data = normalized_df['data'].values
-    horizon_len = TEST  # Forecast the next 90 points
+    horizon_len = TEST  
     historical_data = time_series_data[:-horizon_len]
     true_future_values = time_series_data[-horizon_len:]
 
         
-    # --- 3. Initialize TimesFM 2.5 PyTorch Model ---
+    # Initializing model
     model = timesfm.TimesFM_2p5_200M_torch.from_pretrained("google/timesfm-2.5-200m-pytorch")
     model.compile(
         timesfm.ForecastConfig(
@@ -96,21 +88,18 @@ def predict_data(task, subject, modality, url):
         )
     )
 
-    # --- 4. Generate Forecast ---
+    # Generating forecast
     point_forecast, quantile_forecast = model.forecast(
         horizon=horizon_len,
-        inputs=[historical_data],  # Single time series as input
+        inputs=[historical_data],
     )
-    forecast_values = point_forecast[0]  # Extract the forecast for our single series
+    forecast_values = point_forecast[0]
     
     
-
-    # Evaluates the MSE of the code
     RMSE = root_mean_squared_error(normalized_test_array, forecast_values)
     MAE = mean_absolute_error(normalized_test_array, forecast_values)
-    MASE = mean_absolute_scaled_error(normalized_test_array.to_numpy(), forecast_values, y_train=normalized_df['data'][:-TEST].to_numpy()) #Revert back: delete to.numpy() from normtestar
-
-
+    MASE = mean_absolute_scaled_error(normalized_test_array.to_numpy(), forecast_values, y_train=normalized_df['data'][:-TEST].to_numpy())
+    
     print("="*20)
     print(f"Root Mean Squared Error for {task}{subject}{modality}:", RMSE)
     print(f"Mean Absolute Error for {task}{subject}{modality}: ", MAE)
